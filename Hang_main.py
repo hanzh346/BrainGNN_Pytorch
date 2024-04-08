@@ -1,16 +1,19 @@
+from fetch_hang_ADNI_data import *
+from torch.utils.data import DataLoader, Dataset, Subset
+from sklearn.model_selection import train_test_split, KFold
+from torch_geometric.data import Data
+import torch
 import os
 import numpy as np
 import argparse
 import time
 import copy
-from sklearn.model_selection import train_test_split, KFold
 import torch
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, TensorDataset
 from imports.ABIDEDataset import ABIDEDataset
-from torch_geometric.loader import DataLoader
 from net.braingnn import Network
 from imports.utils import train_val_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -51,10 +54,19 @@ opt = parser.parse_args()
 
 if not os.path.exists(opt.save_path):
     os.makedirs(opt.save_path)
+# Assuming dataTable, class_pairs, mat_files_dir, graph_measure_path are defined
+# Assume dataTable.csv is your dataset containing subject IDs, diagnosis info, etc.
+dataTable = pd.read_csv('/home/hang/GitHub/BrainGNN_Pytorch/data/filtered_selectedDataUnique_merged_ADNI.csv')
+mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results/" 
+graph_measure_path = '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/organized/KDE_Results/reorgnized_AllMeasuresAndDiagnosisByThreshold_DISTANCE.mat'
+class_pairs = [
+     (['CN', 'SMC'], ['EMCI', 'LMCI']),
+     (['CN', 'SMC'], 'AD'),
+     (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
+    # (['EMCI', 'LMCI'],'AD'),
+]
 
-#################### Parameter Initialization #######################
 path = opt.dataroot
-name = 'ABIDE'
 save_model = opt.save_model
 load_model = opt.load_model
 opt_method = opt.optim
@@ -63,26 +75,35 @@ fold = opt.fold
 writer = SummaryWriter(os.path.join('./log',str(fold)))
 
 
+X_features, X_measures, y = perform_classification(dataTable, class_pairs, mat_files_dir, graph_measure_path)
+# Convert to PyTorch tensors
+X_features_tensor = torch.tensor(X_features, dtype=torch.float)
+X_measures_tensor = torch.tensor(X_measures, dtype=torch.float)
+y_tensor = torch.tensor(y, dtype=torch.long)
+# Concatenate along feature dimension
+X_tensor = X_features_tensor#torch.cat((X_features_tensor, X_measures_tensor), dim=1)
+# Assuming X_tensor and y_tensor are your dataset tensors
+num_features = X_tensor.size(1)
+num_classes = 2  # Adjust according to your specific problem
 
-################## Define Dataloader ##################################
+# KFold cross-validator
+k_folds = 5
+kfold = KFold(n_splits=k_folds, shuffle=True, random_state=42)
 
-dataset = ABIDEDataset(path,name)
-dataset.data.y = dataset.data.y.squeeze()
-dataset.data.x[dataset.data.x == float('inf')] = 0
+# Splitting dataset indices for cross-validation
+indices = np.arange(len(X_tensor))
 
-tr_index,val_index,te_index = train_val_test_split(fold=fold)
+class CustomDataset(Dataset):
+    """Custom dataset to facilitate loading."""
+    def __init__(self, features, labels):
+        self.features = features
+        self.labels = labels
 
-train_dataset = dataset[tr_index]
-val_dataset = dataset[val_index]
-test_dataset = dataset[te_index]
-print(train_dataset)
+    def __len__(self):
+        return len(self.labels)
 
-train_loader = DataLoader(train_dataset,batch_size=opt.batchSize, shuffle= True)
-val_loader = DataLoader(val_dataset, batch_size=opt.batchSize, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=opt.batchSize, shuffle=False)
-
-
-
+    def __getitem__(self, idx):
+        return self.features[idx], self.labels[idx]
 
 ############### Define Graph Deep Learning Network ##########################
 model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
@@ -127,8 +148,14 @@ def train(epoch):
     s2_list = []
     loss_all = 0
     step = 0
-    for data in train_loader:
-        data = data.to(device)
+    for batch_idx, data in enumerate(train_loader):
+        if isinstance(data, list):
+            # If data is a list, unpack and move each element to the device as needed
+            data = [item.to(device) for item in data]
+        else:
+            # Directly move to device if data is a tensor or a Data object
+            data = data.to(device)
+
         optimizer.zero_grad()
         output, w1, w2, s1, s2 = model(data.x, data.edge_index, data.batch, data.edge_attr, data.pos)
         s1_list.append(s1.view(-1).detach().cpu().numpy())
@@ -202,59 +229,77 @@ def test_loss(loader,epoch):
 #######################################################################################
 best_model_wts = copy.deepcopy(model.state_dict())
 best_loss = 1e10
-for epoch in range(0, num_epoch):
-    since  = time.time()
-    tr_loss, s1_arr, s2_arr, w1, w2 = train(epoch)
-    tr_acc = test_acc(train_loader)
-    val_acc = test_acc(val_loader)
-    val_loss = test_loss(val_loader,epoch)
-    time_elapsed = time.time() - since
-    print('*====**')
-    print('{:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
-    print('Epoch: {:03d}, Train Loss: {:.7f}, '
-          'Train Acc: {:.7f}, Test Loss: {:.7f}, Test Acc: {:.7f}'.format(epoch, tr_loss,
-                                                       tr_acc, val_loss, val_acc))
+for fold, (train_ids, test_ids) in enumerate(kfold.split(indices)):
+    print(f'Fold {fold+1}/{k_folds}')
+    
+    # Further split train_ids into training and validation sets
+    train_ids, val_ids = train_test_split(train_ids, test_size=0.2, random_state=42)
+    
+    # Extracting datasets for the current fold
+    X_train, y_train = X_tensor[train_ids], y_tensor[train_ids]
+    X_val, y_val = X_tensor[val_ids], y_tensor[val_ids]
+    X_test, y_test = X_tensor[test_ids], y_tensor[test_ids]
+    
+    # Convert to Dataset and DataLoader
+    train_dataset = CustomDataset(X_train, y_train)
+    val_dataset = CustomDataset(X_val, y_val)
+    test_dataset = CustomDataset(X_test, y_test)
+    
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    for epoch in range(0, num_epoch):
+        since  = time.time()
+        tr_loss, s1_arr, s2_arr, w1, w2 = train(epoch)
+        tr_acc = test_acc(train_loader)
+        val_acc = test_acc(val_loader)
+        val_loss = test_loss(val_loader,epoch)
+        time_elapsed = time.time() - since
+        print('*====**')
+        print('{:.0f}m {:.0f}s'.format(time_elapsed // 60, time_elapsed % 60))
+        print('Epoch: {:03d}, Train Loss: {:.7f}, '
+            'Train Acc: {:.7f}, Test Loss: {:.7f}, Test Acc: {:.7f}'.format(epoch, tr_loss,
+                                                        tr_acc, val_loss, val_acc))
 
-    writer.add_scalars('Acc',{'train_acc':tr_acc,'val_acc':val_acc},  epoch)
-    writer.add_scalars('Loss', {'train_loss': tr_loss, 'val_loss': val_loss},  epoch)
-    writer.add_histogram('Hist/hist_s1', s1_arr, epoch)
-    writer.add_histogram('Hist/hist_s2', s2_arr, epoch)
+        writer.add_scalars('Acc',{'train_acc':tr_acc,'val_acc':val_acc},  epoch)
+        writer.add_scalars('Loss', {'train_loss': tr_loss, 'val_loss': val_loss},  epoch)
+        writer.add_histogram('Hist/hist_s1', s1_arr, epoch)
+        writer.add_histogram('Hist/hist_s2', s2_arr, epoch)
 
-    if val_loss < best_loss and epoch > 5:
-        print("saving best model")
-        best_loss = val_loss
-        best_model_wts = copy.deepcopy(model.state_dict())
-        if save_model:
-            torch.save(best_model_wts, os.path.join(opt.save_path,str(fold)+'.pth'))
+        if val_loss < best_loss and epoch > 5:
+            print("saving best model")
+            best_loss = val_loss
+            best_model_wts = copy.deepcopy(model.state_dict())
+            if save_model:
+                torch.save(best_model_wts, os.path.join(opt.save_path,str(fold)+'.pth'))
 
 #######################################################################################
 ######################### Testing on testing set ######################################
 #######################################################################################
 
-if opt.load_model:
-    model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
-    model.load_state_dict(torch.load(os.path.join(opt.save_path,str(fold)+'.pth')))
-    model.eval()
-    preds = []
-    correct = 0
-    for data in val_loader:
-        data = data.to(device)
-        outputs= model(data.x, data.edge_index, data.batch, data.edge_attr,data.pos)
-        pred = outputs[0].max(1)[1]
-        preds.append(pred.cpu().detach().numpy())
-        correct += pred.eq(data.y).sum().item()
-    preds = np.concatenate(preds,axis=0)
-    trues = val_dataset.data.y.cpu().detach().numpy()
-    cm = confusion_matrix(trues,preds)
-    print("Confusion matrix")
-    print(classification_report(trues, preds))
+    if opt.load_model:
+        model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
+        model.load_state_dict(torch.load(os.path.join(opt.save_path,str(fold)+'.pth')))
+        model.eval()
+        preds = []
+        correct = 0
+        for data in val_loader:
+            data = data.to(device)
+            outputs= model(data.x, data.edge_index, data.batch, data.edge_attr,data.pos)
+            pred = outputs[0].max(1)[1]
+            preds.append(pred.cpu().detach().numpy())
+            correct += pred.eq(data.y).sum().item()
+        preds = np.concatenate(preds,axis=0)
+        trues = val_dataset.data.y.cpu().detach().numpy()
+        cm = confusion_matrix(trues,preds)
+        print("Confusion matrix")
+        print(classification_report(trues, preds))
 
-else:
-   model.load_state_dict(best_model_wts)
-   model.eval()
-   test_accuracy = test_acc(test_loader)
-   test_l= test_loss(test_loader,0)
-   print("===========================")
-   print("Test Acc: {:.7f}, Test Loss: {:.7f} ".format(test_accuracy, test_l))
-   print(opt)
-
+    else:
+        model.load_state_dict(best_model_wts)
+        model.eval()
+        test_accuracy = test_acc(test_loader)
+        test_l= test_loss(test_loader,0)
+        print("===========================")
+        print("Test Acc: {:.7f}, Test Loss: {:.7f} ".format(test_accuracy, test_l))
+        print(opt)

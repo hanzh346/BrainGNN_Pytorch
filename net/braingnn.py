@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torch_geometric.nn import TopKPooling
+from torch_geometric.nn.pool.topk_pool import TopKPooling
 from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 from torch_geometric.utils import (add_self_loops, sort_edge_index,
                                    remove_self_loops)
@@ -69,10 +69,10 @@ class Network(torch.nn.Module):
         x = self.bn1(F.relu(self.fc1(x)))
         x = F.dropout(x, p=0.5, training=self.training)
         x = self.bn2(F.relu(self.fc2(x)))
-        x= F.dropout(x, p=0.5, training=self.training)
+        x = F.dropout(x, p=0.5, training=self.training)
         x = F.log_softmax(self.fc3(x), dim=-1)
 
-        return x,self.pool1.weight,self.pool2.weight, torch.sigmoid(score1).view(x.size(0),-1), torch.sigmoid(score2).view(x.size(0),-1)
+        return x,self.pool1.select.weight,self.pool2.select.weight, torch.sigmoid(score1).view(x.size(0),-1), torch.sigmoid(score2).view(x.size(0),-1)
 
     def augment_adj(self, edge_index, edge_weight, num_nodes):
         edge_index, edge_weight = add_self_loops(edge_index, edge_weight,

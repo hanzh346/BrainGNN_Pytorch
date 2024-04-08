@@ -24,7 +24,7 @@ import warnings
 import os
 
 warnings.filterwarnings("ignore")
-root_folder = '/data/'
+root_folder = 'home/hang/GitHub/BrainGNN_Pytorch/data/'
 data_folder = os.path.join(root_folder, 'ABIDE_pcp/cpac/filt_noglobal/')
 
 # Process boolean command line arguments

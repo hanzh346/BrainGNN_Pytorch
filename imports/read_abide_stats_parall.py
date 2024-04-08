@@ -14,7 +14,7 @@ import numpy as np
 from scipy.io import loadmat
 from torch_geometric.data import Data
 import networkx as nx
-from networkx.convert_matrix import from_numpy_matrix
+
 import multiprocessing
 from torch_sparse import coalesce
 from torch_geometric.utils import remove_self_loops
@@ -133,8 +133,8 @@ def read_sigle_data(data_dir,filename,use_gdc =False):
     pcorr = np.abs(temp['pcorr'][()])
 
     num_nodes = pcorr.shape[0]
-    G = from_numpy_matrix(pcorr)
-    A = nx.to_scipy_sparse_matrix(G)
+    G = nx.from_numpy_array(pcorr)
+    A = nx.to_scipy_sparse_array(G)
     adj = A.tocoo()
     edge_att = np.zeros(len(adj.row))
     for i in range(len(adj.row)):
