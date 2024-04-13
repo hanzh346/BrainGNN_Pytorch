@@ -83,7 +83,7 @@ def main():
     fea_corr = Reader.get_networks(subject_IDs, iter_no='', kind='correlation', atlas_name=atlas) #(1035, 200, 200)
     fea_pcorr = Reader.get_networks(subject_IDs, iter_no='', kind='partial correlation', atlas_name=atlas) #(1035, 200, 200)
 
-    if not os.path.exists(os.path.join(data_folder,'raw')):
+    if not os.path.exists(os.path.join(data_folder,'raw')):#save the list of h5 files in h5 folder
         os.makedirs(os.path.join(data_folder,'raw'))
     for i, subject in enumerate(subject_IDs):
         dd.io.save(os.path.join(data_folder,'raw',subject+'.h5'),{'corr':fea_corr[i],'pcorr':fea_pcorr[i],'label':y[i]%2})

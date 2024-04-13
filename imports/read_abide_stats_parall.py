@@ -79,7 +79,7 @@ def read_data(data_dir):
 
     # parallar computing
     cores = multiprocessing.cpu_count()
-    pool = multiprocessing.Pool(processes=cores)
+    pool = multiprocessing.Pool(processes=int(cores/2))
     #pool =  MyPool(processes = cores)
     func = partial(read_sigle_data, data_dir)
 
@@ -97,7 +97,7 @@ def read_data(data_dir):
     print('Time: ', stop - start)
 
 
-
+    # res1: edge_attr(weights of partical corr), res2:edge_indx, res3: correlation matrix,res4:label,res5:number of nodes
     for j in range(len(res)):
         edge_att_list.append(res[j][0])
         edge_index_list.append(res[j][1]+j*res[j][4])

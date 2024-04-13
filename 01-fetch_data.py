@@ -51,7 +51,7 @@ def main():
                              ' default: cpac.')
     parser.add_argument('--atlas', default='cc200',
                         help='Brain parcellation atlas. Options: ho, cc200 and cc400, default: cc200.')
-    parser.add_argument('--download', default=True, type=str2bool,
+    parser.add_argument('--download', default=False, type=str2bool,
                         help='Dowload data or just compute functional connectivity. default: True')
     args = parser.parse_args()
     print(args)

@@ -14,6 +14,7 @@ from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, TensorDataset
 from imports.ABIDEDataset import ABIDEDataset
+from  ADNI_dataset import ADNI_DATASET
 from net.braingnn import Network
 from imports.utils import train_val_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -75,35 +76,27 @@ fold = opt.fold
 writer = SummaryWriter(os.path.join('./log',str(fold)))
 
 
-X_features, X_measures, y = perform_classification(dataTable, class_pairs, mat_files_dir, graph_measure_path)
-# Convert to PyTorch tensors
-X_features_tensor = torch.tensor(X_features, dtype=torch.float)
-X_measures_tensor = torch.tensor(X_measures, dtype=torch.float)
-y_tensor = torch.tensor(y, dtype=torch.long)
-# Concatenate along feature dimension
-X_tensor = X_features_tensor#torch.cat((X_features_tensor, X_measures_tensor), dim=1)
-# Assuming X_tensor and y_tensor are your dataset tensors
-num_features = X_tensor.size(1)
-num_classes = 2  # Adjust according to your specific problem
+# Adjust read_data to return a list of Data objects and corresponding labels
+data_list = ADNI_DATASET(root=mat_files_dir, name='/home/hang/GitHub/BrainGNN_Pytorch/data/filtered_selectedDataUnique_merged_ADNI.csv')
 
 # KFold cross-validator
 k_folds = 5
 kfold = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+# Splitting data_list indices for cross-validation
+indices = np.arange(len(data_list))
+data_list.data.y = data_list.data.y.squeeze()
+data_list.data.x[data_list.data.x == float('inf')] = 0
 
-# Splitting dataset indices for cross-validation
-indices = np.arange(len(X_tensor))
+tr_index,val_index,te_index = train_val_test_split(fold=fold)
 
-class CustomDataset(Dataset):
-    """Custom dataset to facilitate loading."""
-    def __init__(self, features, labels):
-        self.features = features
-        self.labels = labels
+train_dataset= data_list[tr_index]
+val_dataset = data_list[val_index]
+test_dataset = data_list[te_index]
+print(train_dataset)
 
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return self.features[idx], self.labels[idx]
+train_loader = DataLoader(train_dataset,batch_size=opt.batchSize, shuffle= True)
+val_loader = DataLoader(val_dataset, batch_size=opt.batchSize, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=opt.batchSize, shuffle=False)
 
 ############### Define Graph Deep Learning Network ##########################
 model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
@@ -229,21 +222,21 @@ def test_loss(loader,epoch):
 #######################################################################################
 best_model_wts = copy.deepcopy(model.state_dict())
 best_loss = 1e10
-for fold, (train_ids, test_ids) in enumerate(kfold.split(indices)):
-    print(f'Fold {fold+1}/{k_folds}')
-    
-    # Further split train_ids into training and validation sets
-    train_ids, val_ids = train_test_split(train_ids, test_size=0.2, random_state=42)
-    
-    # Extracting datasets for the current fold
-    X_train, y_train = X_tensor[train_ids], y_tensor[train_ids]
-    X_val, y_val = X_tensor[val_ids], y_tensor[val_ids]
-    X_test, y_test = X_tensor[test_ids], y_tensor[test_ids]
-    
-    # Convert to Dataset and DataLoader
-    train_dataset = CustomDataset(X_train, y_train)
-    val_dataset = CustomDataset(X_val, y_val)
-    test_dataset = CustomDataset(X_test, y_test)
+# Assuming you're working within a cross-validation setup
+for fold, (train_ids, test_ids) in enumerate(kfold.split(data_list)):
+    # Split data into training and testing sets
+    train_val_dataset = [data_list[i] for i in train_ids]
+    test_dataset = [data_list[i] for i in test_ids]
+
+    # Further split training data into actual training and validation sets
+    train_ids, val_ids = train_test_split(range(len(train_val_dataset)), test_size=0.2, random_state=42)
+    train_dataset = [train_val_dataset[i] for i in train_ids]
+    val_dataset = [train_val_dataset[i] for i in val_ids]
+
+    # Create DataLoaders for train, validation, and test
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
