@@ -8,7 +8,6 @@ import torch
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader, Dataset, Subset
 from imports.ABIDEDataset import ABIDEDataset
 from torch_geometric.loader import DataLoader
 from net.braingnn import Network
@@ -75,7 +74,7 @@ tr_index,val_index,te_index = train_val_test_split(fold=fold)
 train_dataset = dataset[tr_index]
 val_dataset = dataset[val_index]
 test_dataset = dataset[te_index]
-print(train_dataset)
+print(type(train_dataset))
 
 train_loader = DataLoader(train_dataset,batch_size=opt.batchSize, shuffle= True)
 val_loader = DataLoader(val_dataset, batch_size=opt.batchSize, shuffle=False)
@@ -128,6 +127,7 @@ def train(epoch):
     loss_all = 0
     step = 0
     for data in train_loader:
+        print(data.batch)
         data = data.to(device)
         optimizer.zero_grad()
         output, w1, w2, s1, s2 = model(data.x, data.edge_index, data.batch, data.edge_attr, data.pos)
