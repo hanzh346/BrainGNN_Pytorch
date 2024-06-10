@@ -12,7 +12,7 @@ from net.braingraphconv import MyNNConv
 
 ##########################################################################################################################
 class Network(torch.nn.Module):
-    def __init__(self, indim, ratio, nclass, k=8, R=120):
+    def __init__(self, indim, ratio, nclass, k=4, R=120):
         '''
 
         :param indim: (int) node feature dimension
@@ -39,7 +39,12 @@ class Network(torch.nn.Module):
         self.conv2 = MyNNConv(self.dim1, self.dim2, self.n2, normalize=False)
         self.pool2 = TopKPooling(self.dim2, ratio=ratio, multiplier=1, nonlinearity=torch.sigmoid)
 
+        # self.n3 = nn.Sequential(nn.Linear(self.R, self.k, bias=False), nn.ReLU(), nn.Linear(self.k, self.dim2 * self.dim2))
+        # self.conv3 = MyNNConv(self.dim2, self.dim2, self.n3, normalize=False)
+        # self.pool3 = TopKPooling(self.dim2, ratio=ratio, multiplier=1, nonlinearity=torch.sigmoid)
+
         #self.fc1 = torch.nn.Linear((self.dim2) * 2, self.dim2)
+        
         self.fc1 = torch.nn.Linear((self.dim1+self.dim2)*2, self.dim2)
         self.bn1 = torch.nn.BatchNorm1d(self.dim2)
         self.fc2 = torch.nn.Linear(self.dim2, self.dim3)
@@ -53,7 +58,8 @@ class Network(torch.nn.Module):
 
         x = self.conv1(x, edge_index, edge_attr, pos)
 
-        x, edge_index, edge_attr, batch, perm1, score1 = self.pool1(x, edge_index, edge_attr, batch)
+        x, edge_index, edge_attr, batch, perm1, score1,  all_scores1 = self.pool1(x, edge_index, edge_attr, batch)
+
 
         pos = pos[perm1]
         x1 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
@@ -62,9 +68,10 @@ class Network(torch.nn.Module):
         edge_index, edge_attr = self.augment_adj(edge_index, edge_attr, x.size(0))
 
         x = self.conv2(x, edge_index, edge_attr, pos)
-        x, edge_index, edge_attr, batch, perm2, score2 = self.pool2(x, edge_index,edge_attr, batch)
+        x, edge_index, edge_attr, batch, perm2, score2, all_scores1 = self.pool2(x, edge_index,edge_attr, batch)
 
         x2 = torch.cat([gmp(x, batch), gap(x, batch)], dim=1)
+
 
         x = torch.cat([x1,x2], dim=1)
         x = self.bn1(F.relu(self.fc1(x)))
@@ -73,8 +80,7 @@ class Network(torch.nn.Module):
         x = F.dropout(x, p=0.5, training=self.training)
         x = F.log_softmax(self.fc3(x), dim=-1)
 
-        return x,self.pool1.select.weight,self.pool2.select.weight, torch.sigmoid(score1).view(x.size(0),-1), torch.sigmoid(score2).view(x.size(0),-1),perm1, perm2
-
+        return x,  self.pool1.select.weight,  self.pool2.select.weight, torch.sigmoid(score1).view(x.size(0),-1), torch.sigmoid(score2).view(x.size(0),-1),  all_scores1,perm1,perm2
     def augment_adj(self, edge_index, edge_weight, num_nodes):
         edge_index, edge_weight = add_self_loops(edge_index, edge_weight,
                                                  num_nodes=num_nodes)

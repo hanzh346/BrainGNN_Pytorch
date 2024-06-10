@@ -23,6 +23,7 @@ def extract_second_elements_from_mat(file_path):
         second_element = kde_results[i, 0][0, 1]
         if second_element.ndim == 1:
             second_element = second_element[:, np.newaxis]
+
         corrected_arrays.append(second_element)
     
     final_array = np.hstack(corrected_arrays)
@@ -33,7 +34,7 @@ def get_KDE(root_dir, mat_files_dir):
     subj_kde_list = [extract_second_elements_from_mat(kde_path) for kde_path in mat_files_dir]
     connectivity = conn_measure.fit_transform(subj_kde_list)
     for i, subj_kde in enumerate(subj_kde_list):
-        print(subj_kde)
+
         # For partial correlation, we treat each (500, 120) as a single subject's data
 
         subj_ID = mat_files_dir[i].split('/')[-1].split('_KDE')[0]
@@ -41,6 +42,10 @@ def get_KDE(root_dir, mat_files_dir):
         output_path = os.path.join(root_dir, f"{subj_ID}_partial_correlation_KDE.mat")
         savemat(output_path, {'partial_corr': connectivity[i]})
 
-root_dir = '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results'
-mat_files_dir = glob.glob(os.path.join(root_dir, '*KDE*'))
-get_KDE(root_dir, mat_files_dir)
+root_dir = ['/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_CN_neg_connectome',
+            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_MCI_pos_connectome',
+            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_CNpos_connectome',
+           '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_ADpos_connectome']
+for path in root_dir:
+    mat_files_dir = glob.glob(os.path.join(path, '*KDE*'))
+    get_KDE(path, mat_files_dir)

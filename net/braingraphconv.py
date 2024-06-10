@@ -52,6 +52,7 @@ class MyNNConv(MyMessagePassing):
         #     x = (None if x[0] is None else torch.matmul(x[0].unsqueeze(1), weight).squeeze(1),
         #          None if x[1] is None else torch.matmul(x[1].unsqueeze(1), weight).squeeze(1))
 
+
         return self.propagate(edge_index, size=size, x=x,
                               edge_weight=edge_weight)
 

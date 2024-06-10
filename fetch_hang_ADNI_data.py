@@ -5,14 +5,14 @@ import timeit
 import networkx as nx
 import os
 import numpy as np
-import pandas as pd
 import torch
 import networkx as nx
 from scipy.io import loadmat
-from torch_geometric.data import Data,  Batch
+from torch_geometric.data import Data
 from torch_geometric.utils import  remove_self_loops
 import multiprocessing
 import glob
+from sklearn.utils import resample
 from torch_sparse import coalesce
 from functools import partial
 def extract_features(file_path, field_name='scaledMahalDistMatrix'):
@@ -70,7 +70,7 @@ def process_subject(subject_id, binary_label, mat_files_dir, percentile, connect
     adj = A.tocoo()
     edge_att = np.zeros(len(adj.row))
     for i in range(len(adj.row)):
-        edge_att[i] = node_features[adj.row[i], adj.col[i]]
+        edge_att[i] = edge_features[adj.row[i], adj.col[i]]
     edge_index = np.stack([A.row, A.col])
     edge_index, edge_att = remove_self_loops(torch.from_numpy(edge_index), torch.from_numpy(edge_att))
     edge_index = edge_index.long()
@@ -84,82 +84,23 @@ def process_subject(subject_id, binary_label, mat_files_dir, percentile, connect
                 y=torch.tensor([binary_label], dtype=torch.long),
                 pos=pos)
 
-def split(data, batch):
-    node_slice = torch.cumsum(torch.from_numpy(np.bincount(batch)), 0)
-    node_slice = torch.cat([torch.tensor([0]), node_slice])
 
-    row, _ = data.edge_index
-    edge_slice = torch.cumsum(torch.from_numpy(np.bincount(batch[row])), 0)
-    edge_slice = torch.cat([torch.tensor([0]), edge_slice])
 
-    # Edge indices should start at zero for every graph.
-    data.edge_index -= node_slice[batch[row]].unsqueeze(0)
-
-    slices = {'edge_index': edge_slice}
-    if data.x is not None:
-        slices['x'] = node_slice
-    if data.edge_attr is not None:
-        slices['edge_attr'] = edge_slice
-    if data.y is not None:
-        if data.y.size(0) == batch.size(0):
-            slices['y'] = node_slice
-        else:
-            slices['y'] = torch.arange(0, batch[-1] + 2, dtype=torch.long)
-    if data.pos is not None:
-        slices['pos'] = node_slice
-
-    return data, slices
-# def read_data(dataTable, class_pairs, mat_files_dir,connectome, num_classes,percentile=10):
-#     all_data = []
-
-# #for class_0_labels, class_1_labels in class_pairs:
-#     class_0_labels = class_pairs[0]
-#     class_1_labels = class_pairs[1]
-    
-#     if num_classes ==2:
-#         # dataTable['binary_labels'] = dataTable.apply(lambda row:
-#         #     0 if row['DX_bl'] in class_0_labels and row['AV45'] < 1.11 else
-#         #     1 if row['DX_bl'] in class_1_labels and row['AV45'] >= 1.11 else np.nan, axis=1)
-#         dataTable['binary_labels'] = dataTable.apply(lambda row:
-#             0 if row['DX_bl'] in class_0_labels and row['SUMMARYSUVR_WHOLECEREBNORM'] < 1.11 else
-#             1 if row['DX_bl'] in class_1_labels and row['SUMMARYSUVR_WHOLECEREBNORM'] >= 1.11 else np.nan, axis=1)
-        
-#     else:
-#         class_2_labels = class_pairs[2]  
-#         class_3_labels = class_pairs[3]  
-#         dataTable['binary_labels'] = dataTable.apply(lambda row:
-#             0 if row['DX_bl'] in class_0_labels and row['AV45'] < 1.11 else
-#             1 if row['DX_bl'] in class_1_labels and row['AV45'] >= 1.11 else
-#             2 if row['DX_bl'] in class_2_labels and row['AV45'] >= 1.11 else
-#             3 if row['DX_bl'] in class_3_labels and row['AV45'] >= 1.11 else np.nan, axis=1)
-    
-
-#     filtered_data = dataTable.dropna(subset=['binary_labels'])
-#     filtered_data = filtered_data.drop_duplicates(subset='PTID', keep='first')
-    
-#     for _, row in filtered_data.iterrows():
-#         subject_id = row['PTID']
-#         binary_label = int(row['binary_labels'])
-#         data = process_subject(subject_id, binary_label, mat_files_dir, percentile=percentile,connectome=connectome)
-#         if data is not None:
-#             all_data.append(data)
-
-#     return all_data#, batch_torch
-def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,percentile=10):
+def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,percentile=10,resample_data=True):
     all_data = []
     ADNI_merge = pd.read_csv('/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNIMERGE_30Jan2024.csv')
     UCBERKLEY_PET = pd.read_excel('/home/hang/GU/Project/AD_classification_synthesis/data/ADNI/UCBERKELEYAV45_01_14_21.xlsx')
 
 
     # Path to the raw data
-    data_list_included = glob.glob('/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results/raw/*meanSUVR.mat')
+    data_list_included = glob.glob(os.path.join(mat_files_dir,'*_Z_scoring.mat'))
 
     # Extract subject IDs from file names
-    subject_ids_included = [filename.split('/')[-1].split('_meanSUVR')[0] for filename in data_list_included]
+    subject_ids_included = [filename.split('/')[-1].split('_Z_scoring.mat')[0] for filename in data_list_included]
 
 
-
-
+    binary_label_counts = {}
+    subject_list = []
     for id in subject_ids_included:
         # Get the diagnosis values sorted by exam date for the subject
         diagnosis_values = ADNI_merge[ADNI_merge['PTID'] == id].sort_values('EXAMDATE')['DX'].dropna().values
@@ -170,7 +111,7 @@ def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,
 
         # Extract RID from the subject ID
         rid = id.split('_')[-1]
-        print(f"Extracted RID: {rid}")
+        #print(f"Extracted RID: {rid}")
 
         # Check the SUVR values for the extracted RID
         suvr_values = UCBERKLEY_PET[UCBERKLEY_PET['RID'].astype(str) == rid]['SUMMARYSUVR_COMPOSITE_REFNORM']
@@ -198,6 +139,7 @@ def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,
         if num_classes == 2:
             if diagnosis in class_pairs[0] and ab_long == 0:
                 binary_label = 0 
+                subject_list.append(id)
             elif diagnosis in class_pairs[1] and ab_long == 1:
                 binary_label = 1
             else:
@@ -215,18 +157,200 @@ def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,
                 continue
             
         # Process the subject data
-        data = process_subject(id, float(binary_label), mat_files_dir, percentile=percentile, connectome=connectome)
+        data = process_subject(id, binary_label, mat_files_dir, percentile=percentile, connectome=connectome)
     
         # Append the processed data if not None
         if data is not None:
             all_data.append(data)
+            binary_label_counts[binary_label] = binary_label_counts.get(binary_label, 0) + 1
+
+    # Resample the data if requested
+    if resample_data:
+            # Group the data by binary label
+        grouped_data = {label: [] for label in binary_label_counts.keys()}
+        for data in all_data:
+            grouped_data[int(data.y.item())].append(data)
+        
+        # Find the minimum class count
+        min_class_count = min(binary_label_counts.values())
+        
+        # Resample each group to the size of the smallest group
+        resampled_data = []
+        for label, data_list in grouped_data.items():
+            if len(data_list) > min_class_count:
+                data_list = resample(data_list, replace=False, n_samples=min_class_count, random_state=42)
+            resampled_data.extend(data_list)
+        
+        all_data = resampled_data
+        binary_label_counts = {label: min_class_count for label in binary_label_counts.keys()}
+
+            # Print out the counts of unique values in binary_label after resampling
+    print("Unique value counts in binary labels after resampling:", binary_label_counts)
+    print(subject_list)
     return all_data
-mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results_corrected_by_age_sec_education/"
-num_classes = 2
-connectome = 'Z_scoring'
-class_pairs = [['CN', 'SMC'], ['MCI', 'EMCI', 'LMCI']]
-data = read_data( class_pairs, mat_files_dir,connectome, num_classes,percentile=10)
-print(len(data))
+def get_connectome_path_and_label(connectome_path, class_pair):
+    class_map = {
+        'CN': ('CNnegLong_connectome.mat', 0),
+        'CNpos': ('CNposSUVRValues_connectome.mat', 1),
+        'MCI': ('MCISUVRValues_connectome.mat', 1),
+        'Dementia': ('ADSUVRValues_connectome.mat', 1)
+    }
+
+    class_name_0, class_name_1 = class_pair
+
+    connectome_paths_labels = []
+
+    if class_name_0 in class_map:
+        if class_name_0 == 'CN':
+
+
+            new_last_substring = 'fp_CN_as_reference'
+            delimiter = '/'
+
+            connectome_path = switch_last_substring(connectome_path, delimiter, new_last_substring)
+        if class_name_0 == 'CN' and class_name_1 == 'CN':
+            connectome_paths_labels.append((os.path.join(connectome_path, class_map['CN'][0]), 0))
+            connectome_paths_labels.append((os.path.join(connectome_path, class_map['CNpos'][0]), 1))
+        else:
+            mat_path_0, binary_label_0 = class_map[class_name_0]
+            connectome_paths_labels.append((os.path.join(connectome_path, mat_path_0), 0))
+
+    if class_name_1 in class_map and not (class_name_0 == 'CN' and class_name_1 == 'CN'):
+        mat_path_1, binary_label_1 = class_map[class_name_1]
+        connectome_paths_labels.append((os.path.join(connectome_path, mat_path_1), binary_label_1))
+
+    return connectome_paths_labels
+
+def load_for_perturbation(baseline, class_pair, percentile,resample_data):
+    input_file_path = '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/IndividualConnectome'
+    all_data = []
+
+
+    # Determine the correct connectome path based on baseline
+    connectome_path = os.path.join(input_file_path, 'bl_CN_as_reference') if baseline else os.path.join(input_file_path, 'fp_CN_as_reference')
+
+    # Get the connectome paths and binary labels
+    connectome_info = get_connectome_path_and_label(connectome_path, class_pair)
+
+    if not connectome_info:
+        print("No valid class pair found.")
+        return all_data
+
+    for connectome, binary_label in connectome_info:
+        print(connectome,binary_label)
+        print(f"Processing connectome: {connectome} with label: {binary_label}")
+
+        if not os.path.exists(connectome):
+            print(f"Connectome file not found: {connectome}")
+            continue
+
+        brain_connectome = loadmat(connectome)
+
+        node_features_list = None
+        edge_features_list = None
+
+        for keys, value in brain_connectome.items():
+            if 'SUVRValues' in keys or 'IndividualAmyloidConnectome' in keys:
+                node_features_list = value
+                print(f"Node feature list loaded: {keys}")
+            if 'partial_corrs' in keys:
+                edge_features_list = value
+                print(f"Edge feature list loaded: {keys}")
+        
+        if node_features_list is None or edge_features_list is None:
+            print(f"Skipping {connectome} due to missing data.")
+            continue
+
+        for idx in range(len(node_features_list)):
+            node_features = node_features_list[idx]
+            num_nodes = node_features.shape[0]
+            edge_features = edge_features_list[idx]
+
+            node_features = apply_threshold(node_features, percentile=percentile)
+            edge_features = apply_threshold(edge_features, percentile=percentile)
+            
+            G = nx.from_numpy_array(edge_features)
+            A = nx.to_scipy_sparse_array(G, format='coo')
+            adj = A.tocoo()
+            edge_att = np.zeros(len(adj.row))
+            for i in range(len(adj.row)):
+                edge_att[i] = edge_features[adj.row[i], adj.col[i]]
+            edge_index = np.stack([A.row, A.col])
+            edge_index, edge_att = remove_self_loops(torch.from_numpy(edge_index), torch.from_numpy(edge_att))
+            edge_index = edge_index.long()
+            edge_index, edge_att = coalesce(edge_index, edge_att, num_nodes, num_nodes)
+            pos = torch.eye(num_nodes)  # Using an identity matrix for positional data
+
+            all_data.append(Data(x=torch.tensor(node_features, dtype=torch.float),
+                                 edge_index=edge_index,
+                                 edge_attr=edge_att,
+                                 y=torch.tensor([binary_label], dtype=torch.long),
+                                 pos=pos))
+        # Resample the data if requested
+    if resample_data:
+        # Group the data by binary label
+        binary_label_counts = {0: 0, 1: 0}
+        for data in all_data:
+            binary_label_counts[int(data.y.item())] += 1
+
+        grouped_data = {label: [] for label in binary_label_counts.keys()}
+        for data in all_data:
+            grouped_data[int(data.y.item())].append(data)
+        
+        # Find the minimum class count
+        min_class_count = min(binary_label_counts.values())
+        
+        # Resample each group to the size of the smallest group
+        resampled_data = []
+        for label, data_list in grouped_data.items():
+            if len(data_list) > min_class_count:
+                data_list = resample(data_list, replace=False, n_samples=min_class_count, random_state=42)
+            resampled_data.extend(data_list)
+        
+        all_data = resampled_data
+
+        # Print out the counts of unique values in binary_label after resampling
+        print("Unique value counts in binary labels after resampling:", {label: min_class_count for label in binary_label_counts.keys()})
+
+
+    
+    return all_data
+def switch_last_substring(s, delimiter, new_last_substring):
+    parts = s.split(delimiter)
+    if len(parts) < 2:
+        return s  # Return the original string if there is no delimiter
+    
+    parts[-1] = new_last_substring
+    return delimiter.join(parts)
+
+# # Example usage
+# class_pairs = [
+#     ('CN', 'MCI'),
+#     # ('CN', 'Dementia'),
+#     # ('CN', 'CN'),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
+#     # ('MCI', 'Dementia')
+# ]
+
+# for class_pair in class_pairs:
+#     all_data = load_for_perturbation(baseline=True, class_pair=class_pair)
+#     print(f"Class pair {class_pair}: {len(all_data)} data entries loaded.")
+
+
+
+# mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results_corrected_by_age_sec_education"
+# # mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/MIXED_ALL_AGE_SEX_EDU_CORRECTED"
+# num_classes = 2
+# connectome = 'Z_scoring'
+# class_pairs = [
+#      (['CN', 'SMC'], ['MCI', 'EMCI', 'LMCI']),
+# #    (['CN', 'SMC'], 'Dementia'),
+# #     (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
+# #(['CN', 'SMC'], ['CN', 'SMC'],['EMCI', 'LMCI'],'AD')
+# ]
+# for class_pair in class_pairs:
+#     print(class_pair)
+#     data = read_data( class_pair, mat_files_dir,connectome, num_classes,percentile=10,resample_data=False)
+# # print(len(data))
 # class_pairs = [
 #     (['CN'], ['MCI', 'AD']),  # Example class pair
 #     # Add more class pairs as needed
@@ -234,10 +358,3 @@ print(len(data))
 
 
 # # Now, `all_data` contains a list of Data objects ready for GNN processing.
-
-# class_pairs = [
-#      (['CN', 'SMC'], ['EMCI', 'LMCI']),
-#      (['CN', 'SMC'], 'AD'),
-#      (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
-#     # (['EMCI', 'LMCI'],'AD'),
-# ]
