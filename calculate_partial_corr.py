@@ -42,10 +42,10 @@ def get_KDE(root_dir, mat_files_dir):
         output_path = os.path.join(root_dir, f"{subj_ID}_partial_correlation_KDE.mat")
         savemat(output_path, {'partial_corr': connectivity[i]})
 
-root_dir = ['/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_CN_neg_connectome',
-            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_MCI_pos_connectome',
-            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_CNpos_connectome',
-           '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_ADpos_connectome']
+root_dir = ['/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_CN_neg/connectome',
+            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_Hang_MCI_pos/connectome',
+            '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_CN_pos/connectome',
+           '/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/6_HANG_AD_pos/connectome']
 for path in root_dir:
     mat_files_dir = glob.glob(os.path.join(path, '*KDE*'))
     get_KDE(path, mat_files_dir)

@@ -137,13 +137,22 @@ def read_data( class_pairs, mat_files_dir,connectome, num_classes,baseline=True,
         if baseline:
             ab_long = ab_bl
         if num_classes == 2:
-            if diagnosis in class_pairs[0] and ab_long == 0:
-                binary_label = 0 
-                subject_list.append(id)
-            elif diagnosis in class_pairs[1] and ab_long == 1:
-                binary_label = 1
+            if  'CN' in class_pairs[0] or 'SMC'in class_pairs[0]:
+                if diagnosis in class_pairs[0] and ab_long == 0:
+                    binary_label = 0 
+                    subject_list.append(id)
+                elif diagnosis in class_pairs[1] and ab_long == 1:
+                    binary_label = 1
+                else:
+                    continue
             else:
-                continue
+                if diagnosis in class_pairs[0] and ab_long == 1:
+                    binary_label = 0 
+                    subject_list.append(id)
+                elif diagnosis in class_pairs[1] and ab_long == 1:
+                    binary_label = 1
+                else:
+                    continue
         else:
             if diagnosis in class_pairs[0] and ab_long == 0:
                 binary_label = 0
@@ -337,19 +346,19 @@ def switch_last_substring(s, delimiter, new_last_substring):
 
 
 
-# mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results_corrected_by_age_sec_education"
-# # mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/MIXED_ALL_AGE_SEX_EDU_CORRECTED"
-# num_classes = 2
-# connectome = 'Z_scoring'
-# class_pairs = [
-#      (['CN', 'SMC'], ['MCI', 'EMCI', 'LMCI']),
-# #    (['CN', 'SMC'], 'Dementia'),
-# #     (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
-# #(['CN', 'SMC'], ['CN', 'SMC'],['EMCI', 'LMCI'],'AD')
-# ]
-# for class_pair in class_pairs:
-#     print(class_pair)
-#     data = read_data( class_pair, mat_files_dir,connectome, num_classes,percentile=10,resample_data=False)
+#mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results_corrected_by_age_sec_education"
+mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/mixed_all_connectome"
+num_classes = 2
+connectome = 'Z_scoring'
+class_pairs = [
+     (['CN', 'SMC'], ['CN', 'SMC']),
+#    (['CN', 'SMC'], 'Dementia'),
+#     (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
+#(['CN', 'SMC'], ['CN', 'SMC'],['EMCI', 'LMCI'],'AD')
+]
+for class_pair in class_pairs:
+    print(class_pair)
+    data = read_data( class_pair, mat_files_dir,connectome, num_classes,percentile=10,resample_data=False)
 # # print(len(data))
 # class_pairs = [
 #     (['CN'], ['MCI', 'AD']),  # Example class pair

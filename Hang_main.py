@@ -23,25 +23,30 @@ torch.manual_seed(123)
 
 EPS = 1e-10
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(device)
 current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 base_path = '/home/hang/GitHub/BrainGNN_Pytorch/results'
-folder_path = os.path.join(base_path, current_time)
+folder_path = os.path.join(base_path,current_time)
 
-percentiles = [5, 10, 15, 20, 25]
+percentiles = [5, 10,  15, 20,  25]
 # Assuming dataTable, class_pair, mat_files_dir, graph_measure_path are defined
 # Assume dataTable.csv is your dataset containing subject IDs, diagnosis info, etc.
 #dataTable = pd.read_csv('/home/hang/GitHub/BrainGNN_Pytorch/data/filtered_selectedDataUnique_merged_ADNI.csv')#
 
 #mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/MIXED_ALL_AGE_SEX_EDU_CORRECTED"
-
 class_pairs = [
-    ('CN', 'MCI'),
-    ('CN', 'Dementia'),
-    ('CN', 'CN'),  
-    ('MCI', 'Dementia')
+     (['CN', 'SMC'], ['MCI', 'EMCI', 'LMCI']),
+   (['CN', 'SMC'], 'Dementia'),
+    (['CN', 'SMC'], ['CN', 'SMC']),  # Assuming 'CN ab+' is represented like this in the 'DX_bl' column
+    (['MCI', 'EMCI', 'LMCI'],'Dementia')
 ]
-
+# class_pairs = [
+#     ('CN', 'MCI'),
+#     ('CN', 'Dementia'),
+#     ('CN', 'CN'),  
+#     ('MCI', 'Dementia')
+# ]
+#connectomes = [ 'K_JS_Divergence']
 connectomes = ['ScaledMahalanobisDistanceMatrix', 'Z_scoring', 'K_correlation', 'K_JS_Divergence']
 #connectomes = ['Z_scoringLongitude']
 for connectome in connectomes:
@@ -51,9 +56,9 @@ for connectome in connectomes:
             print(class_pair)
             parser = argparse.ArgumentParser()
             parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
-            parser.add_argument('--n_epochs', type=int, default=45, help='number of epochs of training')
+            parser.add_argument('--n_epochs', type=int, default=2, help='number of epochs of training')
             parser.add_argument('--downsample', type=bool, default=True)
-            parser.add_argument('--perturbation', type=bool, default=True)
+            parser.add_argument('--perturbation', type=bool, default=False)
             parser.add_argument('--batchSize', type=int, default=32, help='size of the batches')
             parser.add_argument('--dataroot', type=str, default='home/hang/GitHub/BrainGNN_Pytorch/data/ABIDE_pcp/cpac/filt_noglobal', help='root directory of the dataset')
             parser.add_argument('--fold', type=int, default=0, help='training which fold')
@@ -89,14 +94,15 @@ for connectome in connectomes:
                 opt.save_path_results = osp.join(folder_path, perturbation_folder,str(percentile), f"{class_pair[0]}_vs_{class_pair[1]}", 'results/')
 
             if opt.load_model:
-                date = '2024-06-10_11-21-34'
-                if not opt.perturbation:
-                    opt.save_path_model = os.path.join(base_path,date,osp.join(connectome,str(percentile),f"{class_pair[0]}_vs_{class_pair[1]}",'model/'))
-                    opt.save_path_results = os.path.join(base_path,date,osp.join(connectome,str(percentile),f"{class_pair[0]}_vs_{class_pair[1]}",'results/'))
-                else:
+                date = '2024-06-12_20-47-08 bl'
+
+                if opt.perturbation:
                     perturbation_folder = 'perturbation'  # Example folder name, replace with actual if needed
                     opt.save_path_model = osp.join(base_path, date, perturbation_folder,str(percentile), f"{class_pair[0]}_vs_{class_pair[1]}", 'model/')
                     opt.save_path_results = osp.join(base_path, date, perturbation_folder,str(percentile), f"{class_pair[0]}_vs_{class_pair[1]}", 'results/')
+                else:
+                    opt.save_path_model = os.path.join(base_path,date,osp.join(connectome,str(percentile),f"{class_pair[0]}_vs_{class_pair[1]}",'model/'))
+                    opt.save_path_results = os.path.join(base_path,date,osp.join(connectome,str(percentile),f"{class_pair[0]}_vs_{class_pair[1]}",'results/'))
 
 
             if not os.path.exists(opt.save_path_model) and not opt.load_model:
@@ -131,10 +137,10 @@ for connectome in connectomes:
 
             elif opt.baseline:    
                 mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/ADNI_Second_organized/KDE_Results_corrected_by_age_sec_education" 
-                opt.downsample = True
+                opt.downsample = False
                 data_list = read_data(class_pair, mat_files_dir,connectome,percentile=percentile,num_classes=opt.nclass, baseline=opt.baseline,resample_data=opt.downsample)  
             else:
-                mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/MIXED_ALL_AGE_SEX_EDU_CORRECTED"
+                mat_files_dir = "/media/hang/EXTERNAL_US/Data/1_HANG_FDG_PET/longitudinal_AD_MCI_CN/mixed_all_connectome"
                 data_list = read_data(class_pair, mat_files_dir,connectome,percentile=percentile,num_classes=opt.nclass, baseline=opt.baseline,resample_data=opt.downsample)  
             # KFold cross-validator
             k_folds = 5
@@ -204,7 +210,7 @@ for connectome in connectomes:
 
 
                     optimizer.zero_grad()
-                    output, w1, w2, s1, s2, _,_,_ = model(data.x.float(), data.edge_index, data.batch, data.edge_attr.float(), data.pos)
+                    output, w1, w2, s1, s2, _,_ = model(data.x.float(), data.edge_index, data.batch, data.edge_attr.float(), data.pos)
 
                     s1_list.append(s1.view(-1).detach().cpu().numpy())
                     s2_list.append(s2.view(-1).detach().cpu().numpy())
@@ -258,7 +264,7 @@ for connectome in connectomes:
                 loss_all = 0
                 for data in loader:
                     data = data.to(device)
-                    output, w1, w2, s1, s2, _,_,_= model(data.x.float(), data.edge_index, data.batch, data.edge_attr.float(),data.pos)
+                    output, w1, w2, s1, s2, _,_= model(data.x.float(), data.edge_index, data.batch, data.edge_attr.float(),data.pos)
 
                     loss_c = F.nll_loss(output, data.y)
 
@@ -285,11 +291,11 @@ for connectome in connectomes:
             results = {'Accuracy': [], 'ROC AUC': [], 'Specificity': [], 'Sensitivity': []}
             interesting_indices = {}
             class_specific_results = []
-            score_cross_fold = {}
+
             perm1s = defaultdict(list)
             
             perm2s = defaultdict(list)
-            node_indices_by_class = defaultdict(list)
+            # node_indices_by_class = defaultdict(list)
             # Assuming you're working within a cross-validation setup
             for fold, (train_idx, test_idx) in enumerate(kfold.split(data_list)):
                 # Using the indices to split the dataset
@@ -337,13 +343,19 @@ for connectome in connectomes:
             #######################################################################################
 
                 if opt.load_model:
-                    curr_fold = 0
-                    model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
-                    if os.path.exists(os.path.join(opt.save_path_model,str(fold)+'.pth')):
-                        curr_fold = fold
-                    else:
-                        fold = curr_fold
-                    model.load_state_dict(torch.load(os.path.join(opt.save_path_model,str(fold)+'.pth')))
+
+                    model_dir = opt.save_path_model
+                                        # Find the model file with the largest fold number
+                    fold_files = [f for f in os.listdir(model_dir) if f.endswith('.pth')]
+                   
+                    fold_numbers = [int(f.split('.')[0]) for f in fold_files]
+                    max_fold = max(fold_numbers)
+                    latest_model_path = os.path.join(model_dir, f'{max_fold}.pth')
+                    curr_fold = max_fold
+                    model = Network(opt.indim, opt.ratio, opt.nclass).to(device)
+                    model.load_state_dict(torch.load(latest_model_path))
+                    print(f'Loaded model from {latest_model_path} with fold number {curr_fold}')
+ 
                     model.eval()
                     preds = []
                     prabas = []
@@ -351,7 +363,6 @@ for connectome in connectomes:
                     weight_n1s = []
                     weight_n2s = []
 
-                    score1s = []
 
                     correct = 0
                     for data in test_loader:
@@ -367,26 +378,32 @@ for connectome in connectomes:
                         trues.append(true)
                         weight_n1 = model.n1[0].weight.data
                         weight_n1s.append(weight_n1.cpu().detach().numpy())
-                        allscore1 = outputs[-3].cpu().detach().numpy()    
 
-                        score1s.append(allscore1)
                         # Number of nodes per batch
                         batch_size = data.batch.max().item() + 1
-                        nodes_per_batch = data.x.size(0) // batch_size
-
-                                                # For each class in the batch
-                        for cls_num in np.unique(true):
-                            mask = (true == cls_num)
+                        # For each class in the batch
+                        nodes_per_subject_perm1 = 60
+                        nodes_per_subject_perm2 = 30
+                        
+                        # Split the outputs accordingly for perm1 and perm2
+                        perm1_outputs = outputs[-2].cpu().detach().numpy()
+                        perm2_outputs = outputs[-1].cpu().detach().numpy()
+                        
+                        subject_idx = 0
+                        for batch_idx in range(batch_size):
+                            subject_true = true[batch_idx]
+                            mask = (data.batch.cpu().numpy() == batch_idx)
                             
-                            perm2_class = outputs[-1].cpu().detach().numpy()
-                            perm1_class = outputs[-2].cpu().detach().numpy()
+                            perm1_class = perm1_outputs[subject_idx * nodes_per_subject_perm1: (subject_idx + 1) * nodes_per_subject_perm1]
+                            perm2_class = perm2_outputs[subject_idx * nodes_per_subject_perm2: (subject_idx + 1) * nodes_per_subject_perm2]
                             
-                            perm2s[cls_num].append(perm2_class)
-                            perm1s[cls_num].append(perm1_class)
+                            perm1s[subject_true].append(perm1_class)
+                            perm2s[subject_true].append(perm2_class)
                             
-                            # Save node indices by class
-                            node_indices = data.y[mask].cpu().detach().numpy()
-                            node_indices_by_class[cls_num].append(node_indices)
+                            # node_indices = subject_true.cpu().detach().numpy()
+                            # node_indices_by_class[subject_true].append(node_indices)
+                            
+                            subject_idx += 1
 
                     mean_community = np.array(weight_n1s).mean()
                     std_community = np.array(weight_n1s).std()
@@ -402,7 +419,7 @@ for connectome in connectomes:
                         indexed_tuple = tuple(str(arr.tolist()) for arr in indices)
                         fold_indices.append(indexed_tuple)
                     interesting_indices[fold] = fold_indices 
-                    score_cross_fold[fold] = [s.tolist() for s in score1s]
+
         
                     preds = np.concatenate(preds,axis=0)
                     trues = np.concatenate(trues,axis=0)
@@ -428,8 +445,6 @@ for connectome in connectomes:
                         trues = []
                         weight_n1s = []
 
-
-                        score1s = []
                         for data in test_loader:
                             data = data.to(device)
                             outputs= model(data.x.float(), data.edge_index, data.batch, data.edge_attr.float(),data.pos)
@@ -443,11 +458,10 @@ for connectome in connectomes:
 
                             weight_n1s.append(weight_n1.cpu().detach().numpy())
 
-                            allscore1 = outputs[-3].cpu().detach().numpy()
+
                             perm2 = outputs[-1].cpu().detach().numpy()
                             perm1 = outputs[-2].cpu().detach().numpy()
 
-                            score1s.append(allscore1)
                             perm2s.append(perm2)  
                             perm1s.append(perm1)      
 
@@ -518,7 +532,7 @@ for connectome in connectomes:
                         weight_n1s = []
                         weight_n2s = []
 
-                        score1s = []
+
 
                         correct = 0
                         for data in test_loader:
@@ -534,26 +548,33 @@ for connectome in connectomes:
                             trues.append(true)
                             weight_n1 = model.n1[0].weight.data
                             weight_n1s.append(weight_n1.cpu().detach().numpy())
-                            allscore1 = outputs[-3].cpu().detach().numpy()    
+   
 
-                            score1s.append(allscore1)
                             # Number of nodes per batch
                             batch_size = data.batch.max().item() + 1
-                            nodes_per_batch = data.x.size(0) // batch_size
-
-                                                    # For each class in the batch
-                            for cls_num in np.unique(true):
-                                mask = (true == cls_num)
+                         # For each class in the batch
+                            nodes_per_subject_perm1 = 60
+                            nodes_per_subject_perm2 = 30
+                            
+                            # Split the outputs accordingly for perm1 and perm2
+                            perm1_outputs = outputs[-2].cpu().detach().numpy()
+                            perm2_outputs = outputs[-1].cpu().detach().numpy()
+                            
+                            subject_idx = 0
+                            for batch_idx in range(batch_size):
+                                subject_true = true[batch_idx]
+                                mask = (data.batch.cpu().numpy() == batch_idx)
                                 
-                                perm2_class = outputs[-1].cpu().detach().numpy()
-                                perm1_class = outputs[-2].cpu().detach().numpy()
+                                perm1_class = perm1_outputs[subject_idx * nodes_per_subject_perm1: (subject_idx + 1) * nodes_per_subject_perm1]
+                                perm2_class = perm2_outputs[subject_idx * nodes_per_subject_perm2: (subject_idx + 1) * nodes_per_subject_perm2]
                                 
-                                perm2s[cls_num].append(perm2_class)
-                                perm1s[cls_num].append(perm1_class)
+                                perm1s[subject_true].append(perm1_class)
+                                perm2s[subject_true].append(perm2_class)
                                 
-                                # Save node indices by class
-                                node_indices = data.y[mask].cpu().detach().numpy()
-                                node_indices_by_class[cls_num].append(node_indices)
+                                # node_indices = data.y[mask].cpu().detach().numpy()
+                                # node_indices_by_class[subject_true].append(node_indices)
+                                
+                                subject_idx += 1
 
                         mean_community = np.array(weight_n1s).mean()
                         std_community = np.array(weight_n1s).std()
@@ -569,7 +590,7 @@ for connectome in connectomes:
                             indexed_tuple = tuple(str(arr.tolist()) for arr in indices)
                             fold_indices.append(indexed_tuple)
                         interesting_indices[fold] = fold_indices 
-                        score_cross_fold[fold] = [s.tolist() for s in score1s]
+
             
                         preds = np.concatenate(preds,axis=0)
                         trues = np.concatenate(trues,axis=0)
@@ -581,15 +602,12 @@ for connectome in connectomes:
                         results['Specificity'].append(tn / (tn + fp))
                         results['Sensitivity'].append(tp / (tp + fn))
 
-                score1s_json = [arr.tolist() for arr in score1s]
 
-                # Save score1s as JSON
-            with open(f"{opt.save_path_results}/score1s.json", 'w') as json_file:
-                json.dump(score_cross_fold, json_file)
+
             for cls_num in perm1s.keys():
                 np.save(osp.join(opt.save_path_results,f'perm1_class_{cls_num}.npy'), np.concatenate(perm1s[cls_num], axis=0))
                 np.save(osp.join(opt.save_path_results,f'perm2_class_{cls_num}.npy'), np.concatenate(perm2s[cls_num], axis=0))
-                np.save(osp.join(opt.save_path_results,f'node_indices_class_{cls_num}.npy'), np.concatenate(node_indices_by_class[cls_num], axis=0))
+                # np.save(osp.join(opt.save_path_results,f'node_indices_class_{cls_num}.npy'), np.concatenate(node_indices_by_class[cls_num], axis=0))
 
             # Save as a CSV or Excel file
             #df.to_csv(f"{opt.save_path_results}/score1s.csv", index=False)
