@@ -1,6 +1,0 @@
-# Exclude result directory
-/results/
-# Exclude result directory
-/data/
-# Exclude logs directory and its contents
-/log/
