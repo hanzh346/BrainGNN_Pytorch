@@ -3,14 +3,16 @@ import numpy as np
 import argparse
 import time
 import copy
-
+from Glioma_data import *
 import torch
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
 
 from imports.ABIDEDataset import ABIDEDataset
-from torch_geometric.data import DataLoader
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
+
 from net.braingnn import Network
 from imports.utils import train_val_test_split
 from sklearn.metrics import classification_report, confusion_matrix
@@ -19,7 +21,7 @@ torch.manual_seed(123)
 
 EPS = 1e-10
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+print(device)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
@@ -39,8 +41,8 @@ parser.add_argument('--lamb4', type=float, default=0.1, help='s2 entropy regular
 parser.add_argument('--lamb5', type=float, default=0.1, help='s1 consistence regularization')
 parser.add_argument('--layer', type=int, default=2, help='number of GNN layers')
 parser.add_argument('--ratio', type=float, default=0.5, help='pooling ratio')
-parser.add_argument('--indim', type=int, default=200, help='feature dim')
-parser.add_argument('--nroi', type=int, default=200, help='num of ROIs')
+parser.add_argument('--indim', type=int, default=4, help='node feature dim')
+parser.add_argument('--nroi', type=int, default=116, help='num of ROIs')
 parser.add_argument('--nclass', type=int, default=2, help='num of classes')
 parser.add_argument('--load_model', type=bool, default=False)
 parser.add_argument('--save_model', type=bool, default=True)
@@ -53,7 +55,7 @@ if not os.path.exists(opt.save_path):
 
 #################### Parameter Initialization #######################
 path = opt.dataroot
-name = 'ABIDE'
+name = 'Glioma'
 save_model = opt.save_model
 load_model = opt.load_model
 opt_method = opt.optim
@@ -65,24 +67,43 @@ writer = SummaryWriter(os.path.join('./log',str(fold)))
 
 ################## Define Dataloader ##################################
 
-dataset = ABIDEDataset(path,name)
-dataset.data.y = dataset.data.y.squeeze()
-dataset.data.x[dataset.data.x == float('inf')] = 0
+# Define the base directory where your data is organized
+base_directory = '/media/hang/EXTERNAL_US/Data/glioma/data/organized data'
 
-tr_index,val_index,te_index = train_val_test_split(fold=fold)
-train_dataset = dataset[tr_index]
-val_dataset = dataset[val_index]
-test_dataset = dataset[te_index]
+# Step 1: Load Data
+data_list = load_data_with_graph_attributes(base_directory)
+
+print(f"Loaded {len(data_list)} samples.")
 
 
-train_loader = DataLoader(train_dataset,batch_size=opt.batchSize, shuffle= True)
-val_loader = DataLoader(val_dataset, batch_size=opt.batchSize, shuffle=False)
-test_loader = DataLoader(test_dataset, batch_size=opt.batchSize, shuffle=False)
+
+train_val_ratio = 0.8  # 80% for training
+
+
+# First Split: Training and Temporary (Validation + Test)
+train_dataset, val_dataset = train_test_split(
+    data_list,
+    test_size=(1 - train_val_ratio),
+    random_state=42,
+    stratify=[data.y.item() for data in data_list]
+)
+
+print(f"Training samples: {len(train_dataset)}")
+print(f"Validation samples: {len(val_dataset)}")
+
+
+# Step 4: Create DataLoaders
+# Define your batch size (replace 'opt.batchSize' with your desired value if 'opt' is not defined)
+batch_size = 32  # Example batch size; adjust as needed
+
+# Create DataLoader instances
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
 
 
 ############### Define Graph Deep Learning Network ##########################
-model = Network(opt.indim,opt.ratio,opt.nclass).to(device)
+model = Network(opt.indim,opt.ratio,opt.nclass,opt.nroi).to(device)
 print(model)
 
 if opt_method == 'Adam':
@@ -248,8 +269,8 @@ if opt.load_model:
 else:
    model.load_state_dict(best_model_wts)
    model.eval()
-   test_accuracy = test_acc(test_loader)
-   test_l= test_loss(test_loader,0)
+   test_accuracy = test_acc(val_loader)
+   test_l= test_loss(val_loader,0)
    print("===========================")
    print("Test Acc: {:.7f}, Test Loss: {:.7f} ".format(test_accuracy, test_l))
    print(opt)

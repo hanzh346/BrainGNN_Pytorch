@@ -33,7 +33,7 @@ class MyNNConv(MyMessagePassing):
 
     def forward(self, x, edge_index, edge_weight=None, pseudo= None, size=None):
         """"""
-        edge_weight = edge_weight.squeeze()
+        edge_weight = edge_weight.squeeze().float()
         if size is None and torch.is_tensor(x):
             edge_index, edge_weight = add_remaining_self_loops(
                 edge_index, edge_weight, 1, x.size(0))
