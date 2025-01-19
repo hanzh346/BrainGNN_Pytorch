@@ -8,7 +8,7 @@ from sklearn.model_selection import KFold
 
 
 def train_val_test_split(kfold = 5, fold = 0):
-    n_sub = 1035
+    n_sub = 100
     id = list(range(n_sub))
 
 
