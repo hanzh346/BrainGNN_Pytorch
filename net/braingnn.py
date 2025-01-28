@@ -7,12 +7,12 @@ from torch_geometric.utils import (add_self_loops, sort_edge_index,
                                    remove_self_loops)
 from torch_sparse import spspmm
 
-from net.braingraphconv import MyNNConv
+from braingraphconv import MyNNConv
 
 
 ##########################################################################################################################
 class Network(torch.nn.Module):
-    def __init__(self, indim, ratio, nclass, k=8, R=116):
+    def __init__(self, indim, ratio, nclass, k=4, R=116):
         '''
 
         :param indim: (int) node feature dimension
@@ -24,18 +24,21 @@ class Network(torch.nn.Module):
         super(Network, self).__init__()
 
         self.indim = indim
-        self.dim1 = 32
-        self.dim2 = 32
+        self.dim1 = 64
+        self.dim2 = 128
         self.dim3 = 512
         self.dim4 = 256
         self.dim5 = 8
         self.k = k
         self.R = R
 
-        self.n1 = nn.Sequential(nn.Linear(self.R, self.k, bias=False), nn.ReLU(), nn.Linear(self.k, self.dim1 * self.indim))
+        self.n1 = nn.Sequential(nn.Linear(self.R, self.k, bias=False), nn.GELU(), nn.Linear(self.k, self.dim1 * self.indim))
+        # self.n1_2 = nn.Sequential(nn.Linear(self.R,  self.dim3), nn.GELU(), nn.Linear(self.dim3, self.dim3 * self.dim1))
         self.conv1 = MyNNConv(self.indim, self.dim1, self.n1, normalize=False)
+        # self.conv1_2 = MyNNConv(self.dim1, self.dim3, self.n1_2, normalize=False)
         self.pool1 = TopKPooling(self.dim1, ratio=ratio, multiplier=1, nonlinearity=torch.sigmoid)
-        self.n2 = nn.Sequential(nn.Linear(self.R, self.k, bias=False), nn.ReLU(), nn.Linear(self.k, self.dim2 * self.dim1))
+
+        self.n2 = nn.Sequential(nn.Linear(self.R, self.k, bias=False), nn.GELU(), nn.Linear(self.k, self.dim2 * self.dim1))
         self.conv2 = MyNNConv(self.dim1, self.dim2, self.n2, normalize=False)
         self.pool2 = TopKPooling(self.dim2, ratio=ratio, multiplier=1, nonlinearity=torch.sigmoid)
 
@@ -46,12 +49,10 @@ class Network(torch.nn.Module):
         self.bn2 = torch.nn.BatchNorm1d(self.dim3)
         self.fc3 = torch.nn.Linear(self.dim3, nclass)
 
-
-
-
     def forward(self, x, edge_index, batch, edge_attr, pos):
 
         x = self.conv1(x, edge_index, edge_attr, pos)
+        # x = self.conv1_2(x, edge_index, edge_attr, pos)
         x, edge_index, edge_attr, batch, perm, score1 = self.pool1(x, edge_index, edge_attr, batch)
 
         pos = pos[perm]

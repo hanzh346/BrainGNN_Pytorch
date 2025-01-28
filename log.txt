@@ -1,0 +1,100 @@
+1. Cross validation 2025-01-20_11-31-56 with balance
+Cross-Validation Results
+Date and Time: 2025-01-20_11-31-56
+Number of Splits: 5
+Average Test Accuracy: 0.5605225
+Average Test Loss: 0.8967022
+Average AUC-ROC: 0.6621
+Average Sensitivity: 0.5051
+Average Specificity: 0.6140
+
+parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
+parser.add_argument('--n_epochs', type=int, default=100, help='number of epochs of training')
+parser.add_argument('--batchSize', type=int, default=100, help='size of the batches')
+parser.add_argument('--dataroot', type=str, default='/home/azureuser/projects/BrainGNN/data/ABIDE_pcp/cpac/filt_noglobal', help='root directory of the dataset')
+parser.add_argument('--fold', type=int, default=0, help='training which fold')
+parser.add_argument('--lr', type = float, default=0.01, help='learning rate')
+parser.add_argument('--stepsize', type=int, default=20, help='scheduler step size')
+parser.add_argument('--gamma', type=float, default=0.5, help='scheduler shrinking rate')
+parser.add_argument('--weightdecay', type=float, default=5e-3, help='regularization')
+parser.add_argument('--lamb0', type=float, default=1, help='classification loss weight')
+parser.add_argument('--lamb1', type=float, default=0, help='s1 unit regularization')
+parser.add_argument('--lamb2', type=float, default=0, help='s2 unit regularization')
+parser.add_argument('--lamb3', type=float, default=0.1, help='s1 entropy regularization')
+parser.add_argument('--lamb4', type=float, default=0.1, help='s2 entropy regularization')
+parser.add_argument('--lamb5', type=float, default=0.1, help='s1 consistence regularization')
+parser.add_argument('--layer', type=int, default=2, help='number of GNN layers')
+parser.add_argument('--ratio', type=float, default=0.5, help='pooling ratio')
+parser.add_argument('--indim', type=int, default=4, help='node feature dim')
+parser.add_argument('--nroi', type=int, default=116, help='num of ROIs')
+parser.add_argument('--nclass', type=int, default=2, help='num of classes')
+parser.add_argument('--balance', type=bool, default=True, help='Whether to balance the dataset by downsampling')
+parser.add_argument('--random_state', type=int, default=42, help='Random state for reproducibility')
+parser.add_argument('--top_percent', type=float, default=0.15, help='Top percentage for pruning adjacency matrix')
+parser.add_argument('--save_path', type=str, default='./model/', help='path to save model')
+parser.add_argument('--load_model', type=bool, default=False)
+parser.add_argument('--save_model', type=bool, default=True)
+parser.add_argument('--n_splits', type=int, default=5, help='number of cross-validation folds')  # Added argument
+parser.add_argument('--optim', type=str, default='Adam', help='optimization method: SGD, Adam')
+opt = parser.parse_args()
+
+
+2. Cross-Validation Results without balanca
+Date and Time: 2025-01-20_12-19-31
+Number of Splits: 5
+Average Test Accuracy: 0.6699488
+Average Test Loss: 0.8607807
+Average AUC-ROC: 0.5965
+Average Sensitivity: 0.0678
+Average Specificity: 0.9569
+
+3. with optimal threshold and balance
+Date and Time: 2025-01-20_13-10-03
+Number of Splits: 5
+Average Test Accuracy: 0.5982583
+Average Test Loss: 0.9010137
+Average AUC-ROC: 0.6224
+Average Sensitivity: 0.5943
+Average Specificity: 0.7271
+Average Optimal Threshold: 0.5200
+
+4.with optimal threshold and balance and lr 0.0005
+Date and Time: 2025-01-20_13-19-03
+Number of Splits: 5
+Average Test Accuracy: 0.5604499
+Average Test Loss: 0.9660473
+Average AUC-ROC: 0.5713
+Average Sensitivity: 0.5670
+Average Specificity: 0.6732
+Average Optimal Threshold: 0.5016
+
+5.with optimal threshold and balance and lr 0.005
+Cross-Validation Results:
+Average Test Accuracy: 0.5719158
+Average Test Loss: 0.9439023
+Average AUC-ROC: 0.6025
+Average Sensitivity: 0.6385
+Average Specificity: 0.6313
+Average Optimal Threshold: 0.5241
+Namespace(epoch=0, n_epochs=100, batchSize=100,  fold=5, lr=0.005, stepsize=20, gamma=0.5, weightdecay=0.005, lamb0=1, lamb1=0, lamb2=0, lamb3=0.1, lamb4=0.1, lamb5=0.1, layer=2, ratio=0.5, indim=4, nroi=116, nclass=2, balance=True, random_state=42, top_percent=0.15, save_path='./model/', load_model=False, save_model=True, n_splits=5, optim='Adam')
+Cross-validation summary saved to ./model/2025-01-20_13-22-39/cross_validation_summary.txt
+
+6.Cross-Validation Results:
+Average Test Accuracy: 0.6097242
+Average Test Loss: 0.9054796
+Average AUC-ROC: 0.6397
+Average Sensitivity: 0.5550
+Average Specificity: 0.7741
+Average Optimal Threshold: 0.5015
+Namespace(epoch=0, n_epochs=100, batchSize=100, lr=0.01, stepsize=20, gamma=0.5, weightdecay=0.005, lamb0=1, lamb1=0, lamb2=0, lamb3=0.1, lamb4=0.1, lamb5=0.1, layer=2, ratio=0.5, indim=4, nroi=116, nclass=2, balance=True, random_state=42, top_percent=0.1, save_path='./model/', load_model=False, save_model=True, n_splits=5, optim='Adam')
+Cross-validation summary saved to ./model/2025-01-20_13-36-26/cross_validation_summary.txt
+
+7.Cross-Validation Results:
+Average Test Accuracy: 0.5643939
+Average Test Loss: 0.9203413
+Average AUC-ROC: 0.6178
+Average Sensitivity: 0.5606
+Average Specificity: 0.7348
+Average Optimal Threshold: 0.5211
+Namespace(epoch=0, n_epochs=100, batchSize=100, lr=0.01, stepsize=20, gamma=0.5, weightdecay=0.005, lamb0=1, lamb1=0, lamb2=0, lamb3=0.1, lamb4=0.1, lamb5=0.1, layer=2, ratio=0.5, indim=4, nroi=116, nclass=2, balance=True, random_state=42, top_percent=0.1, save_path='./model/', load_model=False, save_model=True, n_splits=6, optim='Adam')
+Cross-validation summary saved to ./model/2025-01-20_14-20-07/cross_validation_summary.txt
